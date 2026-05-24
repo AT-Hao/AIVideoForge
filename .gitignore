@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# server
+server/.env
+server/.env.local
+server/.env.example
+server/.env.*.local
+
+
+
 # environment variables
 .env
 .env.local

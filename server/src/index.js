@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { connectDB } from './db.js';
 import uploadRoutes from './routes/upload.js';
 import parseRoutes from './routes/parse.js';
 import styleRoutes from './routes/styles.js';
@@ -36,6 +37,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+async function start() {
+  await connectDB();
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

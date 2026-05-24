@@ -3,6 +3,7 @@ import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
+import { getDB } from '../db.js';
 
 const router = Router();
 const uploadDir = path.resolve('uploads');
@@ -22,18 +23,37 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage, limits: { fileSize: 2 * 1024 * 1024 * 1024 } });
 
-router.post('/', upload.single('file'), (req, res) => {
+router.post('/', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
+
+  const id = path.basename(req.file.filename, path.extname(req.file.filename));
+  const filePath = path.join(uploadDir, req.file.filename);
+  const fileBuffer = fs.readFileSync(filePath);
+
+  const db = getDB();
+  const videos = db.collection('videos');
+
   const result = {
-    id: path.basename(req.file.filename, path.extname(req.file.filename)),
+    id,
     url: `/uploads/${req.file.filename}`,
     name: req.file.originalname,
     size: req.file.size,
+    contentType: req.file.mimetype,
+    data: fileBuffer,
     createdAt: new Date().toISOString(),
   };
-  res.json(result);
+
+  await videos.insertOne(result);
+
+  res.json({
+    id: result.id,
+    url: result.url,
+    name: result.name,
+    size: result.size,
+    createdAt: result.createdAt,
+  });
 });
 
 export default router;

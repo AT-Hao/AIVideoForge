@@ -1,56 +1,46 @@
 import { Router } from 'express';
+import { getDB } from '../db.js';
 
 const router = Router();
 
-const taskStore = new Map();
-
-function ensureTask(task) {
-  if (!taskStore.has(task.id)) {
-    taskStore.set(task.id, task);
-  }
-}
-
-router.get('/', (req, res) => {
-  const tasks = Array.from(taskStore.values()).sort(
-    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-  );
+router.get('/', async (req, res) => {
+  const db = getDB();
+  const parses = db.collection('parses');
+  const tasks = await parses.find().sort({ createdAt: -1 }).toArray();
   res.json(tasks);
 });
 
-router.post('/:taskId/retry', (req, res) => {
+router.post('/:taskId/retry', async (req, res) => {
   const { taskId } = req.params;
-  const task = taskStore.get(taskId);
+  const db = getDB();
+  const parses = db.collection('parses');
+
+  const task = await parses.findOne({ taskId });
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
   }
-  task.status = 'pending';
-  task.progress = 0;
-  task.message = '等待重试';
-  task.error = null;
-  task.updatedAt = new Date().toISOString();
 
-  setTimeout(() => {
-    task.status = 'processing';
-    task.progress = 50;
-    task.message = '重试中...';
-    task.updatedAt = new Date().toISOString();
-  }, 1000);
-
-  setTimeout(() => {
-    task.status = 'completed';
-    task.progress = 100;
-    task.message = '重试成功';
-    task.updatedAt = new Date().toISOString();
-  }, 3000);
+  await parses.updateOne(
+    { taskId },
+    {
+      $set: {
+        status: 'processing',
+        progress: 0,
+        error: null,
+        updatedAt: new Date().toISOString(),
+      },
+    }
+  );
 
   res.json({ success: true });
 });
 
-router.delete('/:taskId', (req, res) => {
+router.delete('/:taskId', async (req, res) => {
   const { taskId } = req.params;
-  taskStore.delete(taskId);
+  const db = getDB();
+  const parses = db.collection('parses');
+  await parses.deleteOne({ taskId });
   res.json({ success: true });
 });
 
-export { taskStore, ensureTask };
 export default router;
