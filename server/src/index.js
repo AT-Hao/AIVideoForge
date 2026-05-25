@@ -1,9 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import { connectDB } from './db.js';
+import { connectDB, getDB } from './db.js';
 import uploadRoutes from './routes/upload.js';
 import parseRoutes from './routes/parse.js';
 import styleRoutes from './routes/styles.js';
@@ -12,15 +10,38 @@ import taskRoutes from './routes/tasks.js';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+app.get('/api/video/:id', async (req, res) => {
+  try {
+    const db = getDB();
+    const videos = db.collection('videos');
+    const video = await videos.findOne({ id: req.params.id });
+
+    if (!video || !video.data) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    const buffer = video.data.buffer
+      ? Buffer.from(video.data.buffer)
+      : video.data;
+
+    res.set({
+      'Content-Type': video.contentType || 'video/mp4',
+      'Content-Length': buffer.length,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400',
+    });
+    res.send(buffer);
+  } catch (err) {
+    console.error('Video stream error:', err);
+    res.status(500).json({ error: 'Failed to stream video' });
+  }
+});
 
 app.use('/api/upload', uploadRoutes);
 app.use('/api/parse', parseRoutes);

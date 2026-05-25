@@ -45,7 +45,7 @@ router.post('/', (req, res) => {
       task.status = 'completed';
       task.progress = 100;
       task.message = '渲染完成';
-      task.result = { downloadUrl: `/uploads/render-${taskId}.mp4` };
+      task.result = { downloadUrl: `/api/video/render-${taskId}` };
       task.updatedAt = new Date().toISOString();
     }
   }, 7000);

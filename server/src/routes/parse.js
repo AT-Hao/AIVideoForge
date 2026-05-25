@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import os from 'os';
 import path from 'path';
 import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
 import { getDB } from '../db.js';
 import { uploadFileToArk, waitForFileProcessing, analyzeVideo } from '../volcengine.js';
 
@@ -37,27 +39,18 @@ router.post('/', async (req, res) => {
   res.json({ taskId, status: 'processing' });
 
   process.nextTick(async () => {
+    let localPath;
     try {
       console.log(`[${taskId}] 开始解析视频: ${videoId}`);
 
-      const uploadDir = path.resolve('uploads');
-      const filePath = path.join(uploadDir, `${videoId}${path.extname(video.name || '')}`);
+      const videoData = video.data.buffer
+        ? Buffer.from(video.data.buffer)
+        : video.data;
 
-      let localPath = filePath;
-      if (!fs.existsSync(filePath)) {
-        const fallback = fs.readdirSync(uploadDir).find((f) => f.startsWith(videoId));
-        if (fallback) {
-          localPath = path.join(uploadDir, fallback);
-          console.log(`[${taskId}] 找到本地文件: ${localPath}`);
-        } else if (video.data) {
-          fs.writeFileSync(filePath, video.data);
-          console.log(`[${taskId}] 从 MongoDB 恢复文件到本地: ${filePath}`);
-        } else {
-          throw new Error('Video file not found');
-        }
-      } else {
-        console.log(`[${taskId}] 使用本地文件: ${localPath}`);
-      }
+      const ext = path.extname(video.name || '') || '.mp4';
+      localPath = path.join(os.tmpdir(), `video-parse-${uuidv4()}${ext}`);
+      fs.writeFileSync(localPath, videoData);
+      console.log(`[${taskId}] 从 MongoDB 写入临时文件: ${localPath}`);
 
       await parses.updateOne(
         { taskId },
@@ -67,6 +60,8 @@ router.post('/', async (req, res) => {
       console.log(`[${taskId}] 正在上传视频到火山引擎 Ark...`);
       const fileId = await uploadFileToArk(localPath);
       console.log(`[${taskId}] 上传成功，返回文件 ID: ${fileId}`);
+
+      try { fs.unlinkSync(localPath); } catch {}
 
       await parses.updateOne(
         { taskId },
@@ -106,6 +101,7 @@ router.post('/', async (req, res) => {
       console.log(`[${taskId}] 视频解析任务完成`);
     } catch (err) {
       console.error(`[${taskId}] 解析失败:`, err.message);
+      try { fs.unlinkSync(localPath); } catch {}
       await parses.updateOne(
         { taskId },
         {

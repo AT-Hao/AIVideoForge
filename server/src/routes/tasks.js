@@ -6,8 +6,33 @@ const router = Router();
 router.get('/', async (req, res) => {
   const db = getDB();
   const parses = db.collection('parses');
+  const videos = db.collection('videos');
   const tasks = await parses.find().sort({ createdAt: -1 }).toArray();
-  res.json(tasks);
+  
+  const mappedTasks = await Promise.all(tasks.map(async t => {
+    const video = await videos.findOne({ id: t.videoId });
+    return {
+      id: t.taskId,
+      videoId: t.videoId,
+      video: video ? {
+        id: video.id,
+        url: video.url,
+        name: video.name,
+        size: video.size,
+        createdAt: video.createdAt
+      } : null,
+      type: 'parse',
+      status: t.status,
+      progress: t.progress,
+      message: t.error || (t.status === 'completed' ? '解析完成' : '正在解析视频'),
+      result: t.result,
+      error: t.error,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt
+    };
+  }));
+  
+  res.json(mappedTasks);
 });
 
 router.post('/:taskId/retry', async (req, res) => {

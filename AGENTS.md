@@ -1,16 +1,17 @@
-# AI Video Studio - Agent 项目文档
+# AI Video Studio - 项目文档
 
-## 项目概述
+## 1. 项目概述
+AI 驱动的视频再创造平台。核心业务流：视频上传 → 火山引擎多模态模型解析（关键帧/场景/情绪/转场） → 选择风格模板及编辑 → Remotion 渲染合成。
 
-AI Video Studio 是一个 AI 驱动的视频再创造平台。用户可以上传视频，AI 自动解析内容（关键帧、场景、情绪、转场），选择风格模板，编辑时间轴，最终通过 Remotion 渲染生成新视频。
-
-**技术栈**: React 19 + TypeScript + Vite + Tailwind CSS v4 + Remotion + Express + Zustand
+**核心技术栈**:
+- **前端**: React 19, TypeScript, Vite 8, Tailwind CSS v4, Zustand, Remotion 4
+- **后端**: Express 4, MongoDB, 火山引擎 Ark API
 
 ---
 
-## 项目结构
+## 2. 核心架构与目录结构
 
-```
+```text
 AIVideoForge/
 ├── public/                     # 静态资源
 │   ├── favicon.svg
@@ -70,160 +71,51 @@ AIVideoForge/
 
 ---
 
-## 核心依赖
+## 3. 核心数据流与 API
+系统整体通过**异步任务 + 轮询**的机制串联长耗时业务。
 
-### 前端
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| react | ^19.2.6 | UI 框架 |
-| react-router-dom | ^7.15.1 | 路由管理 |
-| remotion | ^4.0.465 | 视频程序化渲染 |
-| @remotion/player | ^4.0.465 | 视频预览播放器 |
-| @remotion/media | ^4.0.465 | 媒体组件 |
-| zustand | ^5.0.13 | 状态管理 |
-| axios | ^1.16.1 | HTTP 请求 |
-| tailwindcss | ^4.3.0 | CSS 框架 |
-| @radix-ui/react-slot | ^1.2.4 | 组件插槽 |
-| class-variance-authority | ^0.7.1 | 组件变体管理 |
-| lucide-react | ^1.16.0 | 图标库 |
-
-### 后端
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| express | ^4.21.0 | Web 框架 |
-| cors | ^2.8.5 | 跨域处理 |
-| multer | ^1.4.5-lts.1 | 文件上传 |
-| uuid | ^10.0.0 | 唯一 ID 生成 |
-| dotenv | ^16.4.5 | 环境变量 |
-
+1. **上传**: `POST /api/upload` → 视频存入 MongoDB `videos` 集合。
+2. **解析**:
+   - `POST /api/parse`: 触发异步任务，通过 `volcengine.js` 将视频传至火山引擎 Ark，调用 `doubao-seed` 多模态大模型。
+   - `GET /api/parse/:videoId/status`: 前端轮询获取解析结果，存入 MongoDB `parses` 集合。
+3. **编辑**: 结合 `StylesPage` (选择模板) 和 `EditorPage` (编辑时间轴/字幕)，生成前端 `EditProject` 状态。
+4. **预览与渲染**:
+   - 前端通过 Remotion Player 实时预览组合效果。
+   - `POST /api/render` 提交渲染，`GET /api/render/:taskId/status` 获取进度（当前后端基于内存模拟）。
 
 ---
 
-## API 接口
+## 4. 关键模块说明
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | /api/upload | 上传视频 (multipart/form-data) |
-| POST | /api/parse | 创建解析任务 |
-| GET | /api/parse/:videoId/status | 查询解析状态 |
-| GET | /api/styles | 获取风格模板列表 |
-| POST | /api/render | 创建渲染任务 |
-| GET | /api/render/:taskId/status | 查询渲染状态 |
-| GET | /api/tasks | 获取所有任务 |
-| POST | /api/tasks/:taskId/retry | 重试任务 |
-| DELETE | /api/tasks/:taskId | 删除任务 |
-| GET | /api/health | 健康检查 |
+### 4.1 火山引擎集成 (Ark API)
+位于 `server/src/volcengine.js`。依赖 `ARK_API_KEY`，使用模型 `doubao-seed-1-6-251015` (`purpose: user_data`)。
+包含三大步骤：上传视频 → 轮询等待预处理激活 → 提交 Prompt 进行视频结构化解析 (生成摘要、场景、情绪、转场)。
 
----
+### 4.2 Remotion 视频合成
+位于 `src/remotion/VideoComposition.tsx`。
+接收 `videoUrl`, `styleParams`, `subtitles` 属性。利用 CSS 滤镜(实现 `colorTone`)、CSS 动画(转场与暗角)以及按时间轴动态叠加字幕。分辨率固定为 `1920×1080` (16:9)，帧率 `30fps`。
 
-## 状态管理 (Zustand)
-
-```typescript
-interface AppState {
-  currentVideo: VideoUploadResult | null;   // 当前上传的视频
-  parseResult: VideoParseResult | null;     // 解析结果
-  selectedStyle: StyleTemplate | null;      // 选中的风格
-  currentProject: EditProject | null;       // 当前编辑项目
-  tasks: Task[];                            // 任务列表
-}
-```
+### 4.3 风格模板系统
+预设 5 种风格：`cinematic`(电影感), `vlog`, `tech`(科技感), `retro`(复古风), `minimal`(极简)。
+通过 `colorTone` (亮色/复古/黑白等), `transitionSpeed` (转场速度), 和 `filter` 映射具体的视觉与节奏效果。
 
 ---
 
-## 路由结构
+## 5. 开发指南
 
-| 路径 | 页面 | 说明 |
-|------|------|------|
-| / | HomePage | 首页，功能介绍 |
-| /upload | UploadPage | 视频上传 (支持拖拽) |
-| /parse | ParsePage | 解析结果展示 |
-| /styles | StylesPage | 风格模板选择 (5种预设) |
-| /editor | EditorPage | 视频编辑 (时间轴/参数) |
-| /preview | PreviewPage | Remotion 预览 + 提交渲染 |
-| /tasks | TasksPage | 任务列表管理 |
+**环境准备**:
+- 确保启动 MongoDB 服务 (默认 `mongodb://localhost:27017/ai_video`)。
+- 在 `server/.env` 目录下配置 `ARK_API_KEY` 环境变量。
 
----
-
-## 风格模板
-
-| ID | 名称 | 色调 | 特点 |
-|----|------|------|------|
-| cinematic | 电影感 | teal-orange | 宽银幕、胶片色调、戏剧性光影 |
-| vlog | Vlog 风格 | bright | 明亮清新、快节奏、活泼字幕 |
-| tech | 科技感 | cyber | 冷色调、线条动画、数据可视化 |
-| retro | 复古风 | sepia | 暖色调、颗粒感、怀旧滤镜 |
-| minimal | 极简主义 | mono | 黑白灰、大量留白、简洁转场 |
-
----
-
-## Remotion 视频合成
-
-- **Composition**: `VideoComposition`
-- **分辨率**: 1920x1080 (16:9)
-- **帧率**: 30fps
-- **默认时长**: 300 帧 (10秒)
-- **功能**: 视频播放、CSS 滤镜 (colorToneMap)、字幕叠加、淡入动画
-
-### 滤镜映射
-```typescript
-const colorToneMap = {
-  bright: 'brightness(1.1) saturate(1.2)',
-  'teal-orange': 'sepia(0.3) contrast(1.1)',
-  cyber: 'hue-rotate(180deg) contrast(1.2) saturate(1.5)',
-  sepia: 'sepia(0.6) contrast(1.1)',
-  mono: 'grayscale(1) contrast(1.1)',
-};
-```
-
----
-
-## 开发命令
-
-### 前端
+**运行服务**:
 ```bash
-npm run dev      # 启动 Vite 开发服务器
-npm run build    # 构建生产版本 (tsc + vite build)
-npm run lint     # ESLint 检查
-npm run preview  # 预览生产构建
+# 前端 (AIVideoForge 目录下)
+npm run dev
+
+# 后端 (AIVideoForge/server 目录下)
+npm run dev
 ```
 
-### 后端
-```bash
-cd server
-npm run dev      # 启动开发服务器 (node --watch)
-npm start        # 启动生产服务器
-```
-
----
-
-## 关键配置
-
-### Vite 路径别名
-```typescript
-// vite.config.ts
-resolve: {
-  alias: {
-    '@': path.resolve(__dirname, './src'),
-  },
-}
-```
-
-### API 基础地址
-```typescript
-// src/services/api.ts
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
-```
-
-### 上传限制
-```javascript
-// server/src/routes/upload.js
-limits: { fileSize: 2 * 1024 * 1024 * 1024 }  // 2GB
-```
-
----
-
-## 开发注意事项
-- 在开发时，如果修改了代码实现逻辑，需要**同步更新该文档**。
-- 如果该文档与代码实现逻辑不一致，以**代码实现逻辑为准**。
+**开发规范**:
+- 代码逻辑变更后，需同步更新本 `AGENTS.md` 文档。
+- 运行中出现文档与代码不一致时，以**代码实现逻辑**为准。

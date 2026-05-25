@@ -19,6 +19,12 @@ server/.env.example
 server/.env.*.local
 
 
+# agent config
+.agents/*
+.coco/*
+.trae/*
+.trae-cn/*
+
 
 # environment variables
 .env

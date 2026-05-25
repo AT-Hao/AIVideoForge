@@ -95,4 +95,6 @@ export interface Task {
   error?: string;
   createdAt: string;
   updatedAt: string;
+  videoId?: string;
+  video?: VideoUploadResult;
 }

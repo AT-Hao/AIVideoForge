@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Image, Film, Smile, ArrowRightLeft, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
-import { getParseStatus } from '@/services/api';
+import { parseVideo, getParseStatus } from '@/services/api';
 
 
 export function ParsePage() {
@@ -12,6 +12,7 @@ export function ParsePage() {
   const setParseResult = useStore((s) => s.setParseResult);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(!parseResult);
+  const parseTriggered = useRef(false);
 
   useEffect(() => {
     if (!currentVideo) {
@@ -22,6 +23,12 @@ export function ParsePage() {
       setLoading(false);
       return;
     }
+
+    if (!parseTriggered.current) {
+      parseTriggered.current = true;
+      parseVideo(currentVideo.id).catch(() => {});
+    }
+
     const interval = setInterval(async () => {
       try {
         const data = await getParseStatus(currentVideo.id);

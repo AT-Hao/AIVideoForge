@@ -20,9 +20,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="w-64 border-r border-border bg-card flex flex-col">
         <div className="p-6">
           <h1 className="text-xl font-semibold text-primary tracking-tight">
-            AI Video Studio
+            AI Video Forge
           </h1>
-          <p className="text-xs text-muted-foreground mt-1">视频解析及再创造平台</p>
+          <p className="text-xs text-muted-foreground mt-1">视频解析及再创造AI智能平台</p>
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {navItems.map((item) => {

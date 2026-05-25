@@ -2,14 +2,22 @@ import fs from 'fs';
 import FormData from 'form-data';
 import fetch from 'node-fetch';
 
-const ARK_API_KEY = process.env.ARK_API_KEY;
-const ARK_BASE_URL = process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3';
-const ARK_MODEL = process.env.ARK_MODEL_ID || 'doubao-seed-1-6-251015';
+function getApiKey() {
+  const key = process.env.ARK_API_KEY;
+  if (!key) throw new Error('ARK_API_KEY is not configured');
+  return key;
+}
+
+function getBaseUrl() {
+  return process.env.ARK_BASE_URL || 'https://ark.cn-beijing.volces.com/api/v3';
+}
+
+function getModel() {
+  return process.env.ARK_MODEL_ID || 'doubao-seed-1-6-251015';
+}
 
 export async function uploadFileToArk(filePath) {
-  if (!ARK_API_KEY) {
-    throw new Error('ARK_API_KEY is not configured');
-  }
+  const apiKey = getApiKey();
 
   console.log(`[Volcengine] 开始上传文件: ${filePath}`);
 
@@ -18,10 +26,10 @@ export async function uploadFileToArk(filePath) {
   form.append('file', fs.createReadStream(filePath));
   form.append('preprocess_configs[video][fps]', '0.3');
 
-  const res = await fetch(`${ARK_BASE_URL}/files`, {
+  const res = await fetch(`${getBaseUrl()}/files`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${ARK_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       ...form.getHeaders(),
     },
     body: form,
@@ -38,18 +46,17 @@ export async function uploadFileToArk(filePath) {
 }
 
 export async function waitForFileProcessing(fileId) {
-  if (!ARK_API_KEY) {
-    throw new Error('ARK_API_KEY is not configured');
-  }
+  const apiKey = getApiKey();
 
   const maxAttempts = 60;
-  const interval = 2000;
+  const baseInterval = 2000;
+  let elapsed = 0;
 
   console.log(`[Volcengine] 开始等待文件预处理，File ID: ${fileId}`);
 
   for (let i = 0; i < maxAttempts; i++) {
-    const res = await fetch(`${ARK_BASE_URL}/files/${fileId}`, {
-      headers: { Authorization: `Bearer ${ARK_API_KEY}` },
+    const res = await fetch(`${getBaseUrl()}/files/${fileId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
     });
 
     if (!res.ok) {
@@ -58,28 +65,27 @@ export async function waitForFileProcessing(fileId) {
     }
 
     const data = await res.json();
-    if (data.status === 'processed') {
-      console.log(`[Volcengine] 文件预处理完成，File ID: ${fileId}`);
+
+    if (data.status === 'active') {
+      console.log(`[Volcengine] 文件预处理完成，File ID: ${fileId}，耗时 ${elapsed}s`);
       return data;
     }
     if (data.status === 'error') {
       throw new Error(`Ark file processing error: ${data.status_details || 'unknown'}`);
     }
 
-    if (i % 5 === 0) {
-      console.log(`[Volcengine] 文件预处理中... (${i * 2}s / ${maxAttempts * 2}s)`);
-    }
+    console.log(`[Volcengine] 文件状态: ${data.status}，已等待 ${elapsed}s`);
 
-    await new Promise((r) => setTimeout(r, interval));
+    const delay = Math.min(baseInterval + i * 500, 10000);
+    await new Promise((r) => setTimeout(r, delay));
+    elapsed += Math.round(delay / 1000);
   }
 
   throw new Error('Ark file processing timeout');
 }
 
 export async function analyzeVideo(fileId, prompt) {
-  if (!ARK_API_KEY) {
-    throw new Error('ARK_API_KEY is not configured');
-  }
+  const apiKey = getApiKey();
 
   console.log(`[Volcengine] 开始调用模型解析视频，File ID: ${fileId}`);
 
@@ -92,19 +98,19 @@ export async function analyzeVideo(fileId, prompt) {
     '5. summary: 视频内容总结\n' +
     '请确保输出是合法的JSON格式。';
 
-  const res = await fetch(`${ARK_BASE_URL}/responses`, {
+  const res = await fetch(`${getBaseUrl()}/responses`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${ARK_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: ARK_MODEL,
+      model: getModel(),
       input: [
         {
           role: 'user',
           content: [
-            { type: 'input_file', file_id: fileId },
+            { type: 'input_video', file_id: fileId },
             { type: 'input_text', text: prompt || defaultPrompt },
           ],
         },
