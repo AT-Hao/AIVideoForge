@@ -6,8 +6,8 @@ const navItems = [
   { path: '/', label: '首页', icon: Home },
   { path: '/upload', label: '视频上传', icon: Upload },
   { path: '/parse', label: '视频解析', icon: Brain },
-  { path: '/styles', label: '风格选择', icon: Sparkles },
-  { path: '/editor', label: '视频编辑', icon: Film },
+  { path: '/styles', label: '风格选择生成', icon: Sparkles },
+  { path: '/editor', label: '结果微调', icon: Film },
   { path: '/preview', label: '预览渲染', icon: Eye },
   { path: '/tasks', label: '任务中心', icon: List },
 ];

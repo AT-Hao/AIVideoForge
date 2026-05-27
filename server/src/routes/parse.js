@@ -25,16 +25,29 @@ router.post('/', async (req, res) => {
 
   const taskId = `parse-${videoId}`;
 
-  await parses.insertOne({
-    taskId,
-    videoId,
-    status: 'processing',
-    progress: 0,
-    result: null,
-    error: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  // 已有 completed 记录直接复用，不再调用大模型
+  const existing = await parses.findOne({ taskId });
+  if (existing && existing.status === 'completed' && existing.result) {
+    console.log(`[${taskId}] 已存在完成的解析结果，直接复用`);
+    return res.json({ taskId, status: 'completed', reused: true });
+  }
+
+  await parses.updateOne(
+    { taskId },
+    {
+      $set: {
+        taskId,
+        videoId,
+        status: 'processing',
+        progress: 0,
+        result: null,
+        error: null,
+        updatedAt: new Date().toISOString(),
+      },
+      $setOnInsert: { createdAt: new Date().toISOString() },
+    },
+    { upsert: true }
+  );
 
   res.json({ taskId, status: 'processing' });
 
@@ -54,7 +67,7 @@ router.post('/', async (req, res) => {
 
       await parses.updateOne(
         { taskId },
-        { $set: { progress: 10, updatedAt: new Date().toISOString() } }
+        { $set: { progress: 15, updatedAt: new Date().toISOString() } }
       );
 
       console.log(`[${taskId}] 正在上传视频到火山引擎 Ark...`);
@@ -65,7 +78,7 @@ router.post('/', async (req, res) => {
 
       await parses.updateOne(
         { taskId },
-        { $set: { progress: 30, updatedAt: new Date().toISOString() } }
+        { $set: { progress: 40, updatedAt: new Date().toISOString() } }
       );
 
       console.log(`[${taskId}] 等待文件预处理完成...`);
@@ -74,7 +87,7 @@ router.post('/', async (req, res) => {
 
       await parses.updateOne(
         { taskId },
-        { $set: { progress: 60, updatedAt: new Date().toISOString() } }
+        { $set: { progress: 70, updatedAt: new Date().toISOString() } }
       );
 
       console.log(`[${taskId}] 正在调用模型解析视频内容...`);
@@ -98,10 +111,10 @@ router.post('/', async (req, res) => {
         }
       );
 
-      console.log(`[${taskId}] 视频解析任务完成`);
+      console.log(`[${taskId}] 阶段 1（视频内容解析）任务完成`);
     } catch (err) {
       console.error(`[${taskId}] 解析失败:`, err.message);
-      try { fs.unlinkSync(localPath); } catch {}
+      try { if (localPath) fs.unlinkSync(localPath); } catch {}
       await parses.updateOne(
         { taskId },
         {
@@ -132,6 +145,19 @@ router.get('/:videoId/status', async (req, res) => {
     result: task.result,
     error: task.error,
   });
+});
+
+router.get('/:videoId/style-profile', async (req, res) => {
+  const { videoId } = req.params;
+  const db = getDB();
+  const styleProfiles = db.collection('style_profiles');
+
+  const profile = await styleProfiles.findOne({ videoId });
+  if (!profile) {
+    return res.status(404).json({ error: 'Style profile not found' });
+  }
+
+  res.json(profile);
 });
 
 export default router;

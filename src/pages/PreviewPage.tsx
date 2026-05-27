@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Player } from '@remotion/player';
 import { ArrowLeft, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
-import { VideoComposition } from '@/remotion/VideoComposition';
+import { PipelineComposition } from '@/remotion/PipelineComposition';
+import { compileRenderPlan, emptyRenderPlan } from '@/remotion/capabilities';
 import { createRender } from '@/services/api';
 
 export function PreviewPage() {
   const currentVideo = useStore((s) => s.currentVideo);
   const selectedStyle = useStore((s) => s.selectedStyle);
   const currentProject = useStore((s) => s.currentProject);
+  const styleProfile = useStore((s) => s.styleProfile);
+  const layerToggles = useStore((s) => s.layerToggles);
   const navigate = useNavigate();
   const [rendering, setRendering] = useState(false);
 
@@ -20,11 +23,31 @@ export function PreviewPage() {
     }
   }, [currentVideo, selectedStyle, navigate]);
 
+  const videoUrl = useMemo(() => {
+    if (!currentVideo) return '';
+    return currentVideo.url.startsWith('http')
+      ? currentVideo.url
+      : `http://localhost:3001${currentVideo.url}`;
+  }, [currentVideo]);
+
+  /**
+   * 直接在前端把 styleProfile 编译为 RenderPlan，
+   * 同一份 plan 既驱动 Player，也提交给后端渲染器（无需在 server 二次编译）。
+   */
+  const plan = useMemo(() => {
+    if (!styleProfile || !videoUrl) return emptyRenderPlan();
+    return compileRenderPlan({
+      videoUrl,
+      styleProfile,
+      subtitles: currentProject?.subtitles ?? [],
+      layerToggles,
+    });
+  }, [styleProfile, videoUrl, currentProject?.subtitles, layerToggles]);
+
   const handleRender = async () => {
-    if (!currentProject) return;
     setRendering(true);
     try {
-      await createRender(currentProject);
+      await createRender({ plan });
       navigate('/tasks');
     } catch {
       setRendering(false);
@@ -32,10 +55,6 @@ export function PreviewPage() {
   };
 
   if (!currentVideo || !selectedStyle) return null;
-
-  const videoUrl = currentVideo.url.startsWith('http')
-    ? currentVideo.url
-    : `http://localhost:3001${currentVideo.url}`;
 
   return (
     <div className="space-y-6">
@@ -46,7 +65,9 @@ export function PreviewPage() {
           </Button>
           <div>
             <h2 className="text-2xl font-semibold">预览与渲染</h2>
-            <p className="text-muted-foreground">确认效果后提交渲染任务</p>
+            <p className="text-muted-foreground">
+              共 {plan.capabilities.length} 个能力 · {plan.durationInFrames} 帧 · {plan.fps}fps
+            </p>
           </div>
         </div>
         <Button onClick={handleRender} disabled={rendering} className="gap-2">
@@ -57,17 +78,13 @@ export function PreviewPage() {
 
       <div className="rounded-xl border border-border overflow-hidden bg-black">
         <Player
-          component={VideoComposition}
-          inputProps={{
-            videoUrl,
-            styleParams: selectedStyle.params,
-            subtitles: currentProject?.subtitles || [],
-          }}
-          durationInFrames={300}
-          fps={30}
-          compositionWidth={1920}
-          compositionHeight={1080}
-          style={{ width: '100%', height: 'auto', aspectRatio: '16/9' }}
+          component={PipelineComposition}
+          inputProps={{ plan }}
+          durationInFrames={plan.durationInFrames}
+          fps={plan.fps}
+          compositionWidth={plan.width}
+          compositionHeight={plan.height}
+          style={{ width: '100%', height: 'auto', aspectRatio: `${plan.width}/${plan.height}` }}
           controls
           autoPlay
           loop

@@ -1,10 +1,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Image, Film, Smile, ArrowRightLeft, FileText } from 'lucide-react';
+import {
+  Loader2,
+  Image,
+  Film,
+  Smile,
+  ArrowRightLeft,
+  FileText,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
 import { parseVideo, getParseStatus } from '@/services/api';
-
 
 export function ParsePage() {
   const currentVideo = useStore((s) => s.currentVideo);
@@ -19,7 +25,7 @@ export function ParsePage() {
       navigate('/upload');
       return;
     }
-    if (parseResult) {
+    if (parseResult && parseResult.videoId === currentVideo.id) {
       setLoading(false);
       return;
     }
@@ -74,7 +80,7 @@ export function ParsePage() {
                 <Film className="w-4 h-4 text-primary" />
                 场景分析
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-100 overflow-auto">
                 {parseResult.scenes.map((scene, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
                     <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
@@ -94,7 +100,7 @@ export function ParsePage() {
                 <Image className="w-4 h-4 text-primary" />
                 关键帧
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-100 overflow-auto">
                 {parseResult.keyframes.map((kf, i) => (
                   <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-secondary/50">
                     <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
@@ -148,6 +154,13 @@ export function ParsePage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="p-6 rounded-xl border border-dashed border-border bg-card text-sm text-muted-foreground">
+            <p>
+              视频内容解析已完成。下一步：选择目标风格 / 用户保存的风格模板，AI 将基于内容解析结果对 Remotion
+              能力进行适配（色彩 / 转场 / 字幕 / 特效 / 音乐），最终用于视频再渲染。
+            </p>
           </div>
 
           <div className="flex justify-end">

@@ -1,69 +1,135 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Film, Play, Wand2, GripVertical, Type, Music, Timer } from 'lucide-react';
+import {
+  Film,
+  Play,
+  Wand2,
+  Palette,
+  ArrowRightLeft,
+  Type,
+  Sparkles,
+  Music,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
-import type { EditProject, TimelineItem, SubtitleItem } from '@/types';
+
+interface LayerCardProps {
+  icon: React.ElementType;
+  name: string;
+  desc: string;
+  detail?: string;
+  enabled: boolean;
+  onToggle: () => void;
+}
+
+const LayerCard: React.FC<LayerCardProps> = ({ icon: Icon, name, desc, detail, enabled, onToggle }) => (
+  <div
+    className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
+      enabled
+        ? 'border-border bg-card'
+        : 'border-border/40 bg-card/40 opacity-60'
+    }`}
+  >
+    <div
+      className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+        enabled ? 'bg-primary/10' : 'bg-secondary'
+      }`}
+    >
+      <Icon className={`w-5 h-5 ${enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+    </div>
+    <div className="flex-1 min-w-0">
+      <div className="font-medium text-sm">{name}</div>
+      <div className="text-xs text-muted-foreground">{desc}</div>
+      {detail && (
+        <div className="text-xs text-muted-foreground/70 mt-0.5">{detail}</div>
+      )}
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      onClick={onToggle}
+      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 cursor-pointer ${
+        enabled ? 'bg-primary' : 'bg-secondary'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  </div>
+);
 
 export function EditorPage() {
   const currentVideo = useStore((s) => s.currentVideo);
   const selectedStyle = useStore((s) => s.selectedStyle);
-  const parseResult = useStore((s) => s.parseResult);
-  const setCurrentProject = useStore((s) => s.setCurrentProject);
+  const styleProfile = useStore((s) => s.styleProfile);
+  const layerToggles = useStore((s) => s.layerToggles);
+  const setLayerToggles = useStore((s) => s.setLayerToggles);
   const navigate = useNavigate();
-
-  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-  const [subtitles] = useState<SubtitleItem[]>([]);
-  const [colorTone, setColorTone] = useState(selectedStyle?.params.colorTone || 'bright');
-  const [transitionSpeed, setTransitionSpeed] = useState(selectedStyle?.params.transitionSpeed || 1);
 
   useEffect(() => {
     if (!currentVideo || !selectedStyle) {
       navigate('/upload');
-      return;
     }
-    const scenes = parseResult?.scenes || [
-      { start: 0, end: 5, label: '场景1', description: '开场' },
-      { start: 5, end: 10, label: '场景2', description: '发展' },
-      { start: 10, end: 15, label: '场景3', description: '高潮' },
-    ];
-    setTimeline(
-      scenes.map((s, i) => ({
-        id: `scene-${i}`,
-        sceneIndex: i,
-        start: s.start,
-        end: s.end,
-        order: i,
-      }))
-    );
-  }, [currentVideo, selectedStyle, parseResult, navigate]);
-
-  const handleRender = () => {
-    if (!currentVideo || !selectedStyle) return;
-    const project: EditProject = {
-      id: `proj-${Date.now()}`,
-      videoId: currentVideo.id,
-      styleId: selectedStyle.id,
-      customParams: { colorTone, transitionSpeed },
-      timeline,
-      subtitles,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setCurrentProject(project);
-    navigate('/preview');
-  };
+  }, [currentVideo, selectedStyle, navigate]);
 
   if (!currentVideo || !selectedStyle) return null;
+
+  const cg = styleProfile?.colorGrade;
+  const tr = styleProfile?.transitions;
+  const sub = styleProfile?.subtitleStyle;
+  const fx = styleProfile?.effects;
+  const aud = styleProfile?.audioMix;
+
+  const layers = [
+    {
+      key: 'colorGrade' as const,
+      icon: Palette,
+      name: '色彩分级',
+      desc: '场景级亮度、对比度、饱和度、色温、暗角',
+      detail: cg?.scenes?.length ? `${cg.scenes.length} 个场景` : undefined,
+    },
+    {
+      key: 'transitions' as const,
+      icon: ArrowRightLeft,
+      name: '转场效果',
+      desc: '场景间切换动画（淡入淡出/滑动/缩放等）',
+      detail: tr?.length ? `${tr.length} 处转场` : undefined,
+    },
+    {
+      key: 'subtitles' as const,
+      icon: Type,
+      name: '字幕叠加',
+      desc: 'AI 推荐的字体、动画与排版样式',
+      detail: sub ? `${sub.fontFamily} · ${sub.animation}` : undefined,
+    },
+    {
+      key: 'effects' as const,
+      icon: Sparkles,
+      name: '视觉特效',
+      desc: '暗角、胶片颗粒、光晕、故障、色差效果',
+      detail: fx?.length ? `${fx.length} 段特效` : undefined,
+    },
+    {
+      key: 'audioMix' as const,
+      icon: Music,
+      name: '音频混合',
+      desc: '背景音乐氛围、BPM、音量控制',
+      detail: aud?.mood ? `${aud.mood} · ${aud.genre}` : undefined,
+    },
+  ];
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold">视频编辑</h2>
-          <p className="text-muted-foreground">调整时间轴、添加字幕、自定义风格参数</p>
+          <h2 className="text-2xl font-semibold">视频剪辑</h2>
+          <p className="text-muted-foreground">选择要启用的风格模块，关闭不需要的效果</p>
         </div>
-        <Button onClick={handleRender} className="gap-2">
+        <Button onClick={() => navigate('/preview')} size="lg" className="gap-2">
           <Wand2 className="w-4 h-4" />
           生成视频
         </Button>
@@ -82,98 +148,34 @@ export function EditorPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <h3 className="font-medium flex items-center gap-2">
-              <GripVertical className="w-4 h-4 text-muted-foreground" />
-              时间轴
-            </h3>
-            <div className="space-y-2">
-              {timeline.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border"
-                >
-                  <span className="text-xs text-muted-foreground w-6">{index + 1}</span>
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">场景 {item.sceneIndex + 1}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.start}s - {item.end}s
-                    </div>
-                  </div>
-                </div>
-              ))}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+            <h3 className="font-medium text-sm mb-2">视频信息</h3>
+            <div className="text-sm text-muted-foreground space-y-1">
+              <p>视频：{currentVideo.name}</p>
+              <p>风格：{selectedStyle.name}</p>
+              {styleProfile?.pacing && (
+                <p>节奏：{styleProfile.pacing === 'fast' ? '快速' : styleProfile.pacing === 'slow' ? '缓慢' : '中等'}</p>
+              )}
+              {styleProfile?.styleDescription && (
+                <p className="italic text-xs">{styleProfile.styleDescription}</p>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <h3 className="font-medium flex items-center gap-2">
-              <Timer className="w-4 h-4 text-muted-foreground" />
-              风格参数
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm text-muted-foreground">色调</label>
-                <select
-                  value={colorTone}
-                  onChange={(e) => setColorTone(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                >
-                  <option value="bright">明亮</option>
-                  <option value="teal-orange">青橙</option>
-                  <option value="cyber">赛博</option>
-                  <option value="sepia">复古</option>
-                  <option value="mono">黑白</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">转场速度 {transitionSpeed}x</label>
-                <input
-                  type="range"
-                  min={0.5}
-                  max={2}
-                  step={0.1}
-                  value={transitionSpeed}
-                  onChange={(e) => setTransitionSpeed(parseFloat(e.target.value))}
-                  className="mt-1 w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <h3 className="font-medium flex items-center gap-2">
-              <Type className="w-4 h-4 text-muted-foreground" />
-              字幕
-            </h3>
-            <div className="space-y-2">
-              {subtitles.length === 0 && (
-                <p className="text-sm text-muted-foreground">暂无字幕</p>
-              )}
-              {subtitles.map((sub) => (
-                <div key={sub.id} className="p-2 rounded bg-secondary/50 text-sm">
-                  {sub.text}
-                </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full">
-                添加字幕
-              </Button>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <h3 className="font-medium flex items-center gap-2">
-              <Music className="w-4 h-4 text-muted-foreground" />
-              背景音乐
-            </h3>
-            <select className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option>无</option>
-              <option>轻快</option>
-              <option>史诗</option>
-              <option>电子</option>
-            </select>
-          </div>
+        <div className="space-y-3">
+          <h3 className="font-medium text-sm">模块开关</h3>
+          {layers.map((layer) => (
+            <LayerCard
+              key={layer.key}
+              icon={layer.icon}
+              name={layer.name}
+              desc={layer.desc}
+              detail={layer.detail}
+              enabled={layerToggles[layer.key]}
+              onToggle={() => setLayerToggles({ [layer.key]: !layerToggles[layer.key] })}
+            />
+          ))}
         </div>
       </div>
     </div>

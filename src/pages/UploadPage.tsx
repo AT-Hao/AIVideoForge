@@ -10,6 +10,8 @@ export function UploadPage() {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState('');
   const setCurrentVideo = useStore((s) => s.setCurrentVideo);
+  const setParseResult = useStore((s) => s.setParseResult);
+  const setStyleProfile = useStore((s) => s.setStyleProfile);
   const navigate = useNavigate();
 
   const handleFile = useCallback(
@@ -24,6 +26,8 @@ export function UploadPage() {
       try {
         const result = await uploadVideo(file, (p) => setProgress(p));
         setCurrentVideo(result);
+        setParseResult(null);
+        setStyleProfile(null);
         setUploading(false);
         navigate('/parse');
       } catch (e) {
@@ -31,7 +35,7 @@ export function UploadPage() {
         setError('上传失败，请重试');
       }
     },
-    [setCurrentVideo, navigate]
+    [setCurrentVideo, setParseResult, setStyleProfile, navigate]
   );
 
   const onDrop = useCallback(

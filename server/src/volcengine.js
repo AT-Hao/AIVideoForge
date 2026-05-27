@@ -1,6 +1,7 @@
 import fs from 'fs';
 import FormData from 'form-data';
 import fetch from 'node-fetch';
+import { adaptCapabilitiesPrompt } from './pipeline/ai-prompts.js';
 
 function getApiKey() {
   const key = process.env.ARK_API_KEY;
@@ -15,6 +16,8 @@ function getBaseUrl() {
 function getModel() {
   return process.env.ARK_MODEL_ID || 'doubao-seed-1-6-251015';
 }
+
+// ---------------- 文件上传 / 预处理 ----------------
 
 export async function uploadFileToArk(filePath) {
   const apiKey = getApiKey();
@@ -84,50 +87,53 @@ export async function waitForFileProcessing(fileId) {
   throw new Error('Ark file processing timeout');
 }
 
-export async function analyzeVideo(fileId, prompt) {
+// ---------------- 通用 Ark 调用 ----------------
+
+async function postArkResponses(payload) {
   const apiKey = getApiKey();
-
-  console.log(`[Volcengine] 开始调用模型解析视频，File ID: ${fileId}`);
-
-  const defaultPrompt =
-    '请详细分析这个视频内容，以JSON格式输出以下信息：\n' +
-    '1. keyframes: 关键帧数组，每个包含 timestamp（秒）和 description（画面描述）\n' +
-    '2. scenes: 场景数组，每个包含 start（开始秒）、end（结束秒）、label（场景标签）、description（场景描述）\n' +
-    '3. emotions: 情绪变化数组，每个包含 timestamp（秒）、emotion（情绪类型）、confidence（置信度0-1）\n' +
-    '4. transitions: 转场数组，每个包含 timestamp（秒）、type（转场类型）\n' +
-    '5. summary: 视频内容总结\n' +
-    '请确保输出是合法的JSON格式。';
-
   const res = await fetch(`${getBaseUrl()}/responses`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: getModel(),
-      input: [
-        {
-          role: 'user',
-          content: [
-            { type: 'input_video', file_id: fileId },
-            { type: 'input_text', text: prompt || defaultPrompt },
-          ],
-        },
-      ],
-    }),
+    body: JSON.stringify({ model: getModel(), ...payload }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Ark analyze failed: ${res.status} ${text}`);
+    throw new Error(`Ark request failed: ${res.status} ${text}`);
   }
 
   const data = await res.json();
-  console.log(`[Volcengine] 模型响应接收成功，File ID: ${fileId}`);
+  return extractTextFromResponse(data);
+}
 
-  const text = extractTextFromResponse(data);
-  return parseAnalysisResult(text);
+/** 仅文本输入的模型调用 */
+export async function callArkText(prompt) {
+  return postArkResponses({
+    input: [
+      {
+        role: 'user',
+        content: [{ type: 'input_text', text: prompt }],
+      },
+    ],
+  });
+}
+
+/** 文本 + 视频文件输入的多模态模型调用 */
+export async function callArkVideo(fileId, prompt) {
+  return postArkResponses({
+    input: [
+      {
+        role: 'user',
+        content: [
+          { type: 'input_video', file_id: fileId },
+          { type: 'input_text', text: prompt },
+        ],
+      },
+    ],
+  });
 }
 
 function extractTextFromResponse(data) {
@@ -148,24 +154,92 @@ function extractTextFromResponse(data) {
   return JSON.stringify(data);
 }
 
-function parseAnalysisResult(text) {
+function parseJsonStrict(text) {
+  const cleaned = String(text || '')
+    .replace(/```json\n?/g, '')
+    .replace(/```\n?/g, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
+function parseJsonLoose(text) {
   try {
-    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    return {
-      keyframes: parsed.keyframes || [],
-      scenes: parsed.scenes || [],
-      emotions: parsed.emotions || [],
-      transitions: parsed.transitions || [],
-      summary: parsed.summary || '',
-    };
+    return parseJsonStrict(text);
   } catch {
-    return {
-      keyframes: [],
-      scenes: [],
-      emotions: [],
-      transitions: [],
-      summary: text,
-    };
+    return null;
   }
+}
+
+// ---------------- 阶段 1：视频内容解析 ----------------
+
+const DEFAULT_PARSE_PROMPT =
+  '请详细分析这个视频内容，以JSON格式输出以下信息：\n' +
+  '1. keyframes: 关键帧数组，每个包含 timestamp（秒）和 description（画面描述）\n' +
+  '2. scenes: 场景数组，每个包含 start（开始秒）、end（结束秒）、label（场景标签）、description（场景描述）\n' +
+  '3. emotions: 情绪变化数组，每个包含 timestamp（秒）、emotion（情绪类型）、confidence（置信度0-1）\n' +
+  '4. transitions: 转场数组，每个包含 timestamp（秒）、type（转场类型）\n' +
+  '5. summary: 视频内容总结\n' +
+  '请确保输出是合法的JSON格式。';
+
+export async function analyzeVideo(fileId, prompt) {
+  console.log(`[Volcengine] 开始调用模型解析视频，File ID: ${fileId}`);
+  const text = await callArkVideo(fileId, prompt || DEFAULT_PARSE_PROMPT);
+  console.log(`[Volcengine] 模型响应接收成功，File ID: ${fileId}`);
+
+  const parsed = parseJsonLoose(text) || {};
+  return {
+    keyframes: parsed.keyframes || [],
+    scenes: parsed.scenes || [],
+    emotions: parsed.emotions || [],
+    transitions: parsed.transitions || [],
+    summary: parsed.summary || (typeof parsed === 'string' ? parsed : ''),
+  };
+}
+
+// ---------------- 阶段 2：风格模板 → Remotion 能力适配 ----------------
+
+/**
+ * 基于「parseResult + StyleTemplate」让大模型一次性生成符合
+ * VideoStyleProfile 结构的对象。失败时抛错，由路由层决定是否回退。
+ */
+export async function adaptCapabilitiesByTemplate(parseResult, template) {
+  console.log('[Volcengine] 开始进行 Remotion 能力适配...');
+  const prompt = adaptCapabilitiesPrompt(parseResult, template);
+
+  const text = await callArkText(prompt);
+  const parsed = parseJsonLoose(text);
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Capability adaptation: model returned non-JSON');
+  }
+
+  // 兜底字段，确保前端 / Capability 编译器消费稳定
+  const out = {
+    summary: parsed.summary || parseResult?.summary || '',
+    styleDescription: parsed.styleDescription || template?.styleDescription || '通用风格',
+    recommendedFilter: parsed.recommendedFilter || template?.recommendedFilter || 'none',
+    pacing: parsed.pacing || template?.pacing || 'medium',
+    colorGrade: { scenes: parsed?.colorGrade?.scenes || [] },
+    transitions: Array.isArray(parsed.transitions) ? parsed.transitions : [],
+    subtitleStyle: parsed.subtitleStyle || template?.subtitleStyle || {},
+    effects: Array.isArray(parsed.effects) ? parsed.effects : [],
+    audioMix: {
+      tracks: [],
+      mood: parsed?.audioMix?.mood ?? template?.audioMix?.mood,
+      genre: parsed?.audioMix?.genre ?? template?.audioMix?.genre,
+      bpm: parsed?.audioMix?.bpm ?? template?.audioMix?.bpm,
+      masterVolume:
+        parsed?.audioMix?.masterVolume ?? template?.audioMix?.masterVolume ?? 0.8,
+    },
+  };
+
+  console.log(
+    '[Volcengine] 能力适配完成:',
+    JSON.stringify({
+      sceneCount: out.colorGrade.scenes.length,
+      transitionCount: out.transitions.length,
+      effectsCount: out.effects.length,
+      pacing: out.pacing,
+    })
+  );
+  return out;
 }

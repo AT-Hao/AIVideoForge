@@ -44,8 +44,12 @@ export interface StyleTemplate {
   id: string;
   name: string;
   description: string;
+  source?: 'preset' | 'user';
+  videoId?: string | null;
   previewUrl?: string;
   params: StyleParams;
+  template?: unknown;
+  createdAt?: string;
 }
 
 export interface StyleParams {
@@ -80,6 +84,14 @@ export interface SubtitleItem {
   text: string;
   start: number;
   end: number;
+}
+
+export interface LayerToggles {
+  colorGrade: boolean;
+  transitions: boolean;
+  subtitles: boolean;
+  effects: boolean;
+  audioMix: boolean;
 }
 
 export type TaskStatus = 'pending' | 'processing' | 'completed' | 'failed';

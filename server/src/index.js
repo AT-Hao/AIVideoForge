@@ -4,9 +4,10 @@ import dotenv from 'dotenv';
 import { connectDB, getDB } from './db.js';
 import uploadRoutes from './routes/upload.js';
 import parseRoutes from './routes/parse.js';
-import styleRoutes from './routes/styles.js';
+import styleRoutes, { seedPresetStyles } from './routes/styles.js';
 import renderRoutes from './routes/render.js';
 import taskRoutes from './routes/tasks.js';
+import pipelineRoutes from './routes/pipeline.js';
 
 dotenv.config();
 
@@ -48,6 +49,7 @@ app.use('/api/parse', parseRoutes);
 app.use('/api/styles', styleRoutes);
 app.use('/api/render', renderRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/pipeline', pipelineRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
@@ -60,6 +62,9 @@ app.use((err, req, res, next) => {
 
 async function start() {
   await connectDB();
+  await seedPresetStyles().catch((err) => {
+    console.error('Seed preset styles failed:', err.message);
+  });
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
