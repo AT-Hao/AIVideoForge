@@ -1,35 +1,3 @@
-export interface PipelineDefinition {
-  id: string;
-  videoId: string;
-  passes: PipelinePass[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PipelinePass {
-  id: string;
-  name: string;
-  type: 'physical' | 'logical';
-  dependsOn: string[];
-  compositionId: string;
-  params: Record<string, unknown>;
-  outputCodec?: string;
-  status: PipelinePassStatus;
-}
-
-export type PipelinePassStatus = 'pending' | 'running' | 'completed' | 'failed';
-
-export interface PipelineStatus {
-  pipelineId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  progress: number;
-  currentPass: string | null;
-  passes: PipelinePass[];
-  intermediateOutputs: Record<string, string>;
-  finalOutput: string | null;
-  error: string | null;
-}
-
 export interface ColorGradeConfig {
   scenes: ColorGradeScene[];
 }
@@ -61,7 +29,7 @@ export interface TransitionConfig {
   atFrame?: number;
   type: TransitionType;
   durationFrames: number;
-  easing: 'linear' | 'spring' | 'ease-in' | 'ease-out';
+  easing: 'linear' | 'spring' | 'ease-in' | 'ease-out' | 'ease-in-out';
   intensity?: number;
 }
 
@@ -125,22 +93,4 @@ export interface VideoStyleProfile {
   createdAt: string;
 }
 
-export interface SavedStyleTemplate {
-  id: string;
-  name: string;
-  description: string;
-  source: 'preset' | 'user';
-  videoId?: string;
-  styleProfile: Pick<
-    VideoStyleProfile,
-    | 'colorGrade'
-    | 'transitions'
-    | 'subtitleStyle'
-    | 'effects'
-    | 'audioMix'
-    | 'styleDescription'
-    | 'recommendedFilter'
-    | 'pacing'
-  >;
-  createdAt: string;
-}
+

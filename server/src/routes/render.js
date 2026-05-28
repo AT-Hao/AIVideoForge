@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDB } from '../db.js';
 import { compileRenderPlan } from '../remotion/capabilities.js';
+import { runRemotionRender, absolutizePlan } from '../remotion/render-runner.js';
 
 const router = Router();
 
@@ -17,9 +18,6 @@ const renderStore = new Map();
  *
  *  方式 B（自动编译）：
  *    { videoId, subtitles?, layerToggles?, width?, height?, fps? }
- *
- *  方式 C（兼容旧版 EditProject）：
- *    { videoId, subtitles, ... } —— 与 B 等价
  */
 async function resolveRenderPlan(body) {
   if (body && body.plan && Array.isArray(body.plan.capabilities)) {
@@ -55,15 +53,23 @@ async function resolveRenderPlan(body) {
   });
 }
 
+function getServerBaseUrl(req) {
+  // 渲染时 headless Chromium 通过该 baseUrl 拉资源，必须可达。
+  const port = process.env.PORT || 3001;
+  return process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+}
+
 /**
  * POST /api/render
  *
  * 提交一次渲染。无论上层是 EditProject 还是 RenderPlan，最终都会
- * 编译为 RenderPlan 并交给真实渲染器（Remotion CLI / Lambda）。
+ * 编译为 RenderPlan 并交给 Remotion 渲染器。
  */
 router.post('/', async (req, res) => {
   try {
-    const plan = await resolveRenderPlan(req.body);
+    const rawPlan = await resolveRenderPlan(req.body);
+    const baseUrl = getServerBaseUrl(req);
+    const plan = absolutizePlan(rawPlan, baseUrl);
 
     const taskId = `render-${Date.now()}`;
     const task = {
@@ -79,8 +85,8 @@ router.post('/', async (req, res) => {
     };
     renderStore.set(taskId, task);
 
-    // 异步驱动渲染。真实接入点见 runRemotionRender()。
-    runRemotionRender(taskId, plan).catch((err) => {
+    // 异步驱动渲染
+    runRenderTask(taskId, plan).catch((err) => {
       const t = renderStore.get(taskId);
       if (t) {
         t.status = 'failed';
@@ -106,50 +112,31 @@ router.get('/:taskId/status', (req, res) => {
 });
 
 /**
- * 真实渲染接入点。当前实现为占位的进度推进，
- * 接入 Remotion 时替换为：
- *
- *   import { bundle } from '@remotion/bundler';
- *   import { renderMedia, selectComposition } from '@remotion/renderer';
- *
- *   const serveUrl = await bundle({ entryPoint: 'src/remotion/index.ts' });
- *   const composition = await selectComposition({
- *     serveUrl,
- *     id: plan.compositionId,
- *     inputProps: { plan },
- *   });
- *   await renderMedia({
- *     composition,
- *     serveUrl,
- *     codec: 'h264',
- *     outputLocation: `./out/${taskId}.mp4`,
- *     inputProps: { plan },
- *     onProgress: ({ progress }) => updateProgress(taskId, progress),
- *   });
+ * 真实渲染任务执行：bundle -> selectComposition -> renderMedia。
  */
-async function runRemotionRender(taskId, plan) {
+async function runRenderTask(taskId, plan) {
   const update = (patch) => {
     const t = renderStore.get(taskId);
     if (!t) return;
     Object.assign(t, patch, { updatedAt: new Date().toISOString() });
   };
 
-  update({ status: 'processing', progress: 5, message: 'Bundling composition...' });
-  await sleep(800);
-  update({ progress: 30, message: `Rendering ${plan.capabilities.length} capabilities...` });
-  await sleep(2000);
-  update({ progress: 70, message: 'Encoding final video...' });
-  await sleep(1500);
+  update({ status: 'processing', progress: 1, message: 'Bundling composition...' });
+
+  const { downloadUrl } = await runRemotionRender({
+    taskId,
+    plan,
+    onProgress: (progress, message) => {
+      update({ progress, message: message || `Rendering... ${progress}%` });
+    },
+  });
+
   update({
     status: 'completed',
     progress: 100,
     message: 'Render completed',
-    result: { downloadUrl: `/api/video/render-${taskId}` },
+    result: { downloadUrl },
   });
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 export default router;

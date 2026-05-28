@@ -113,7 +113,22 @@ const PRESET_TEMPLATES = [
     id: 'preset-minimal',
     name: '极简主义',
     description: '黑白灰、大量留白、简洁转场',
-    params: { colorTone: 'mono', transitionSpeed: 1.0, subtitleStyle: 'clean', filter: 'minimal' },
+    source: 'preset',
+    template: {
+      version: 1,
+      colorGradeBaseline: { brightness: 1.0, contrast: 1.1, saturation: 0.3, temperature: -0.15, tint: 0, vignette: 0.2 },
+      transitionDefault: { type: 'fade', durationFrames: 10, easing: 'ease-in-out', intensity: 0.4 },
+      subtitleStyle: {
+        fontFamily: 'Noto Sans SC, sans-serif', fontSize: 32, color: '#FFFFFF',
+        animation: 'fadeIn', position: 'bottom', fontWeight: 400, letterSpacing: 0,
+        outlineColor: '#000000', backgroundColor: 'rgba(0,0,0,0.25)', padding: 8,
+      },
+      effectsBaseline: [{ type: 'vignette', intensity: 0.15 }],
+      audioMix: { mood: 'ambient', genre: 'minimal', bpm: 80, masterVolume: 0.7 },
+      pacing: 'slow',
+      recommendedFilter: 'grayscale(0.6) brightness(1.0) contrast(1.1)',
+      styleDescription: '极简主义：黑白灰克制美学，大量留白与简洁转场',
+    },
   },
 ];
 
@@ -135,7 +150,6 @@ export async function seedPresetStyles() {
       source: 'preset',
       videoId: null,
       template: preset.template,
-      params: deriveLegacyParams(preset.template),
       createdAt: now,
     });
   }
@@ -156,7 +170,7 @@ router.get('/', async (_req, res) => {
       description: s.description,
       source: s.source || 'user',
       videoId: s.videoId || null,
-      params: s.params || deriveLegacyParams(s.template),
+      params: deriveLegacyParams(s.template),
       template: s.template,
       createdAt: s.createdAt,
     }));
@@ -185,7 +199,6 @@ router.post('/save', async (req, res) => {
       source: 'user',
       videoId: videoId || null,
       template,
-      params: deriveLegacyParams(template),
       createdAt: new Date().toISOString(),
     };
 

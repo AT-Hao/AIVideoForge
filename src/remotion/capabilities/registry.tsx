@@ -11,6 +11,7 @@ import { ColorGradeLayer } from '../layers/ColorGradeLayer';
 import { TransitionLayer } from '../layers/TransitionLayer';
 import { VFXLayer } from '../layers/VFXLayer';
 import { TextOverlayLayer } from '../layers/TextOverlayLayer';
+import { IntroLayer } from '../layers/IntroLayer';
 import { AudioMixLayer } from '../layers/AudioMixLayer';
 import type {
   Capability,
@@ -22,6 +23,7 @@ import type {
   VisualTransitionProps,
   VisualVFXProps,
   VisualTextProps,
+  VisualIntroProps,
   AudioMixProps,
 } from './types';
 
@@ -40,10 +42,10 @@ const MediaVideoRenderer: React.FC<MediaVideoProps> = (props) => {
       playbackRate={props.playbackRate ?? 1}
       trimBefore={props.startFromFrame}
       trimAfter={props.endAtFrame}
+      objectFit={props.objectFit ?? 'cover'}
       style={{
         width: '100%',
         height: '100%',
-        objectFit: props.objectFit ?? 'cover',
         filter: props.cssFilter || 'none',
       }}
     />
@@ -138,6 +140,21 @@ const REGISTRY: Record<CapabilityKind, CapabilityDescriptor> = {
       const { subtitles, styleConfig } = p as unknown as VisualTextProps;
       return (
         <TextOverlayLayer subtitles={subtitles} styleConfig={styleConfig} />
+      );
+    },
+  },
+  'visual.intro': {
+    kind: 'visual.intro',
+    render: (p) => {
+      const props = p as unknown as VisualIntroProps;
+      return (
+        <IntroLayer
+          text={props.text}
+          durationInFrames={props.durationInFrames}
+          fadeOutFrames={props.fadeOutFrames}
+          fontSize={props.fontSize}
+          fontFamily={props.fontFamily}
+        />
       );
     },
   },

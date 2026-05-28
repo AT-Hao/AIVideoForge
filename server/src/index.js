@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -7,7 +10,6 @@ import parseRoutes from './routes/parse.js';
 import styleRoutes, { seedPresetStyles } from './routes/styles.js';
 import renderRoutes from './routes/render.js';
 import taskRoutes from './routes/tasks.js';
-import pipelineRoutes from './routes/pipeline.js';
 
 dotenv.config();
 
@@ -30,14 +32,47 @@ app.get('/api/video/:id', async (req, res) => {
     const buffer = video.data.buffer
       ? Buffer.from(video.data.buffer)
       : video.data;
+    const total = buffer.length;
+    const contentType = video.contentType || 'video/mp4';
+
+    const range = req.headers.range;
+    if (range) {
+      // 形如 "bytes=0-" / "bytes=1024-2047"
+      const match = /bytes=(\d*)-(\d*)/.exec(range);
+      if (!match) {
+        res.status(416).set('Content-Range', `bytes */${total}`).end();
+        return;
+      }
+      const start = match[1] ? parseInt(match[1], 10) : 0;
+      const end = match[2] ? parseInt(match[2], 10) : total - 1;
+      if (
+        Number.isNaN(start) ||
+        Number.isNaN(end) ||
+        start > end ||
+        end >= total
+      ) {
+        res.status(416).set('Content-Range', `bytes */${total}`).end();
+        return;
+      }
+      const chunk = buffer.subarray(start, end + 1);
+      res.status(206).set({
+        'Content-Type': contentType,
+        'Content-Length': chunk.length,
+        'Content-Range': `bytes ${start}-${end}/${total}`,
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=86400',
+      });
+      res.end(chunk);
+      return;
+    }
 
     res.set({
-      'Content-Type': video.contentType || 'video/mp4',
-      'Content-Length': buffer.length,
+      'Content-Type': contentType,
+      'Content-Length': total,
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=86400',
     });
-    res.send(buffer);
+    res.end(buffer);
   } catch (err) {
     console.error('Video stream error:', err);
     res.status(500).json({ error: 'Failed to stream video' });
@@ -49,7 +84,15 @@ app.use('/api/parse', parseRoutes);
 app.use('/api/styles', styleRoutes);
 app.use('/api/render', renderRoutes);
 app.use('/api/tasks', taskRoutes);
-app.use('/api/pipeline', pipelineRoutes);
+
+// 渲染产物静态目录：可通过 /uploads/renders/${taskId}.mp4 直接下载
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const RENDERS_DIR = path.resolve(__dirname, '..', 'uploads', 'renders');
+if (!fs.existsSync(RENDERS_DIR)) {
+  fs.mkdirSync(RENDERS_DIR, { recursive: true });
+}
+app.use('/uploads/renders', express.static(RENDERS_DIR));
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });

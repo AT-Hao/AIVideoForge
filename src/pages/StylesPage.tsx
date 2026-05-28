@@ -11,11 +11,6 @@ import {
   Loader2,
   Trash2,
   User,
-  Zap,
-  Leaf,
-  UtensilsCrossed,
-  Film,
-  Flame,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store/useStore';
@@ -29,11 +24,6 @@ const presetIcons: Record<string, React.ElementType> = {
   'preset-tech': Monitor,
   'preset-retro': Moon,
   'preset-minimal': Palette,
-  'preset-cyberpunk': Zap,
-  'preset-japanese': Leaf,
-  'preset-food': UtensilsCrossed,
-  'preset-documentary': Film,
-  'preset-sports': Flame,
 };
 
 export function StylesPage() {

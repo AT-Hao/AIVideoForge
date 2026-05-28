@@ -34,6 +34,7 @@ export const CAPABILITY_KINDS = [
   'visual.transition',
   'visual.vfx',
   'visual.text',
+  'visual.intro',
   'audio.mix',
 ] as const;
 
@@ -86,6 +87,19 @@ export interface VisualTextProps {
   fps?: number;
 }
 
+export interface VisualIntroProps {
+  /** 封面文字 */
+  text: string;
+  /** 显示总时长（帧），包含淡出过渡 */
+  durationInFrames: number;
+  /** 淡出过渡时长（帧），默认 15 */
+  fadeOutFrames?: number;
+  /** 字号，默认 96 */
+  fontSize?: number;
+  /** 字体，默认无衬线 */
+  fontFamily?: string;
+}
+
 export interface AudioMixProps {
   config: AudioMixConfig;
 }
@@ -109,6 +123,7 @@ export type Capability =
   | CapabilityBase<'visual.transition', VisualTransitionProps>
   | CapabilityBase<'visual.vfx', VisualVFXProps>
   | CapabilityBase<'visual.text', VisualTextProps>
+  | CapabilityBase<'visual.intro', VisualIntroProps>
   | CapabilityBase<'audio.mix', AudioMixProps>;
 
 // ---------------- Render Plan ----------------

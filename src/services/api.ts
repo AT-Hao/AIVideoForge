@@ -7,15 +7,10 @@ import type {
   SubtitleItem,
   LayerToggles,
 } from '@/types';
-import type {
-  VideoStyleProfile,
-  PipelineDefinition,
-  PipelineStatus,
-  SavedStyleTemplate,
-} from '@/types/pipeline';
+import type { VideoStyleProfile } from '@/types/pipeline';
 import type { RenderPlan } from '@/remotion/capabilities';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3002/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -70,7 +65,15 @@ export async function saveStyleTemplate(payload: {
   description?: string;
   videoId?: string;
   styleProfile: Partial<VideoStyleProfile>;
-}): Promise<SavedStyleTemplate> {
+}): Promise<{
+  id: string;
+  name: string;
+  description: string;
+  source: 'user';
+  videoId: string | null;
+  template: unknown;
+  createdAt: string;
+}> {
   const res = await api.post('/styles/save', payload);
   return res.data;
 }
@@ -131,33 +134,6 @@ export async function createRender(payload: CreateRenderPayload): Promise<Create
 
 export async function getRenderStatus(taskId: string): Promise<Task & { plan?: RenderPlan }> {
   const res = await api.get(`/render/${taskId}/status`);
-  return res.data;
-}
-
-// -------------------- Pipeline --------------------
-
-export interface CreatePipelinePayload {
-  videoId: string;
-  subtitles?: SubtitleItem[];
-  layerToggles?: LayerToggles;
-  width?: number;
-  height?: number;
-  fps?: number;
-}
-
-export async function createPipeline(payload: CreatePipelinePayload | string): Promise<PipelineDefinition & { plan: RenderPlan }> {
-  const body = typeof payload === 'string' ? { videoId: payload } : payload;
-  const res = await api.post('/pipeline/create', body);
-  return res.data;
-}
-
-export async function getPipelineStatus(pipelineId: string): Promise<PipelineStatus & { plan?: RenderPlan }> {
-  const res = await api.get(`/pipeline/${pipelineId}/status`);
-  return res.data;
-}
-
-export async function executePipeline(pipelineId: string): Promise<{ pipelineId: string; status: string; plan?: RenderPlan }> {
-  const res = await api.post(`/pipeline/${pipelineId}/execute`);
   return res.data;
 }
 

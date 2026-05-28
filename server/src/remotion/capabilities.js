@@ -14,6 +14,9 @@ const DEFAULT_DURATION = 300;
 const DEFAULT_FPS = 30;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
+const INTRO_SECONDS = 2;
+const INTRO_FADE_OUT_FRAMES = 15;
+const INTRO_TEXT = 'Created By Antonio';
 
 function estimateDurationInFrames({
   styleProfile,
@@ -82,13 +85,30 @@ export function compileRenderPlan(input) {
     durationInFrames: input.durationInFrames,
   });
 
+  const introFrames = Math.round(INTRO_SECONDS * fps);
+  const totalDurationInFrames = durationInFrames + introFrames;
+  const contentRange = { from: introFrames, durationInFrames };
+
   const capabilities = [];
+
+  // 黑白文字封面（视频开头）
+  capabilities.push({
+    id: 'visual.intro',
+    kind: 'visual.intro',
+    zIndex: 100,
+    props: {
+      text: INTRO_TEXT,
+      durationInFrames: introFrames,
+      fadeOutFrames: INTRO_FADE_OUT_FRAMES,
+    },
+  });
 
   if (videoUrl) {
     capabilities.push({
       id: 'media.video.main',
       kind: 'media.video',
       zIndex: 0,
+      range: contentRange,
       props: {
         src: videoUrl,
         objectFit: 'cover',
@@ -102,6 +122,7 @@ export function compileRenderPlan(input) {
       id: 'visual.colorGrade',
       kind: 'visual.colorGrade',
       zIndex: 10,
+      range: contentRange,
       props: { config: styleProfile?.colorGrade || { scenes: [] } },
     });
   }
@@ -111,6 +132,7 @@ export function compileRenderPlan(input) {
       id: 'visual.transition',
       kind: 'visual.transition',
       zIndex: 20,
+      range: contentRange,
       props: { transitions: styleProfile?.transitions || [] },
     });
   }
@@ -120,6 +142,7 @@ export function compileRenderPlan(input) {
       id: 'visual.vfx',
       kind: 'visual.vfx',
       zIndex: 30,
+      range: contentRange,
       props: { effects: styleProfile?.effects || [] },
     });
   }
@@ -129,6 +152,7 @@ export function compileRenderPlan(input) {
       id: 'visual.text',
       kind: 'visual.text',
       zIndex: 40,
+      range: contentRange,
       props: {
         subtitles,
         styleConfig: styleProfile?.subtitleStyle || {
@@ -148,6 +172,7 @@ export function compileRenderPlan(input) {
       id: 'audio.mix',
       kind: 'audio.mix',
       zIndex: 50,
+      range: contentRange,
       props: { config: styleProfile?.audioMix || { tracks: [] } },
     });
   }
@@ -157,38 +182,10 @@ export function compileRenderPlan(input) {
     width,
     height,
     fps,
-    durationInFrames,
+    durationInFrames: totalDurationInFrames,
     background: '#000',
     capabilities,
   };
 }
 
-/**
- * 从 RenderPlan 推导出"渲染管线 Pass 列表"。每个 Capability 视为一个逻辑 Pass，
- * 末尾追加一个物理 final-encode Pass。所有逻辑 Pass 在 Remotion 内单次渲染中
- * 通过 Composition + Capability Registry 一次性合成（零代际损失）。
- */
-export function derivePassesFromPlan(plan) {
-  const logicalPasses = plan.capabilities.map((cap) => ({
-    id: `pass.${cap.id}`,
-    name: cap.kind,
-    type: 'logical',
-    capabilityId: cap.id,
-    capabilityKind: cap.kind,
-    dependsOn: [],
-    compositionId: plan.compositionId,
-    status: 'pending',
-  }));
 
-  const finalEncode = {
-    id: 'final-encode',
-    name: 'Remotion Final Encode',
-    type: 'physical',
-    dependsOn: logicalPasses.map((p) => p.id),
-    compositionId: plan.compositionId,
-    outputCodec: 'h264',
-    status: 'pending',
-  };
-
-  return [...logicalPasses, finalEncode];
-}

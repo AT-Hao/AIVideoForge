@@ -1,4 +1,4 @@
-import { AbsoluteFill } from 'remotion';
+import { AbsoluteFill, Sequence } from 'remotion';
 import type { RenderPlan, Capability } from './capabilities';
 import { renderCapability, emptyRenderPlan } from './capabilities';
 
@@ -42,8 +42,22 @@ const CapabilitySlot: React.FC<{ capability: Capability }> = ({
   if (!node) return null;
 
   // 媒体类直接铺满父容器，其它能力本身已是 absolute
-  if (capability.kind.startsWith('media.')) {
-    return <AbsoluteFill>{node}</AbsoluteFill>;
+  const wrapped = capability.kind.startsWith('media.') ? (
+    <AbsoluteFill>{node}</AbsoluteFill>
+  ) : (
+    <>{node}</>
+  );
+
+  if (capability.range) {
+    return (
+      <Sequence
+        from={capability.range.from}
+        durationInFrames={capability.range.durationInFrames}
+        layout="none"
+      >
+        {wrapped}
+      </Sequence>
+    );
   }
-  return <>{node}</>;
+  return wrapped;
 };

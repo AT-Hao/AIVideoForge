@@ -25,6 +25,9 @@ export interface CompileRenderPlanInput {
 }
 
 const DEFAULT_DURATION = 300;
+const INTRO_SECONDS = 2;
+const INTRO_FADE_OUT_FRAMES = 15;
+const INTRO_TEXT = 'Created By Antonio';
 
 function estimateDuration(input: CompileRenderPlanInput): number {
   if (input.durationInFrames) return input.durationInFrames;
@@ -53,7 +56,9 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
   const fps = input.fps ?? 30;
   const width = input.width ?? 1920;
   const height = input.height ?? 1080;
-  const durationInFrames = estimateDuration({ ...input, fps });
+  const introFrames = Math.round(INTRO_SECONDS * fps);
+  const baseDuration = estimateDuration({ ...input, fps });
+  const durationInFrames = baseDuration + introFrames;
   const tg = input.layerToggles ?? {
     colorGrade: true,
     transitions: true,
@@ -64,11 +69,27 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
 
   const caps: Capability[] = [];
 
+  // 黑白文字封面，置于内容时间轴之前（zIndex 最高，覆盖任何画面）
+  caps.push({
+    id: 'visual.intro',
+    kind: 'visual.intro',
+    zIndex: 100,
+    props: {
+      text: INTRO_TEXT,
+      durationInFrames: introFrames,
+      fadeOutFrames: INTRO_FADE_OUT_FRAMES,
+    },
+  });
+
+  // 主内容相对帧 -> 绝对帧的统一偏移（intro 之后开始）
+  const contentRange = { from: introFrames, durationInFrames: baseDuration };
+
   if (input.videoUrl) {
     caps.push({
       id: 'media.video.main',
       kind: 'media.video',
       zIndex: 0,
+      range: contentRange,
       props: {
         src: input.videoUrl,
         objectFit: 'cover',
@@ -82,6 +103,7 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
       id: 'visual.colorGrade',
       kind: 'visual.colorGrade',
       zIndex: 10,
+      range: contentRange,
       props: { config: input.styleProfile.colorGrade },
     });
   }
@@ -91,6 +113,7 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
       id: 'visual.transition',
       kind: 'visual.transition',
       zIndex: 20,
+      range: contentRange,
       props: { transitions: input.styleProfile.transitions },
     });
   }
@@ -100,6 +123,7 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
       id: 'visual.vfx',
       kind: 'visual.vfx',
       zIndex: 30,
+      range: contentRange,
       props: { effects: input.styleProfile.effects },
     });
   }
@@ -109,6 +133,7 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
       id: 'visual.text',
       kind: 'visual.text',
       zIndex: 40,
+      range: contentRange,
       props: {
         subtitles: input.subtitles,
         styleConfig: input.styleProfile.subtitleStyle,
@@ -122,6 +147,7 @@ export function compileRenderPlan(input: CompileRenderPlanInput): RenderPlan {
       id: 'audio.mix',
       kind: 'audio.mix',
       zIndex: 50,
+      range: contentRange,
       props: { config: input.styleProfile.audioMix },
     });
   }

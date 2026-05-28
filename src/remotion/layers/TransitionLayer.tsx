@@ -10,6 +10,7 @@ const easingMap = {
   spring: Easing.bezier(0.16, 1, 0.3, 1),
   'ease-in': Easing.in(Easing.quad),
   'ease-out': Easing.out(Easing.quad),
+  'ease-in-out': Easing.inOut(Easing.quad),
 } as const;
 
 const TransitionFlash: React.FC<{ transition: TransitionConfig }> = ({
